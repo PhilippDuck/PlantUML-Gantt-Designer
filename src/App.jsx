@@ -22,7 +22,9 @@ import {
     Italic,
     Download,
     Upload,
-    ChevronDown
+    ChevronDown,
+    Eye,
+    EyeOff
 } from 'lucide-react';
 import { saveProject, loadProject, exportToJSON, importFromJSON } from './db.js';
 
@@ -182,7 +184,8 @@ export default function App() {
             isSeparator: isSeparator,
             isBold: false,
             isItalic: false,
-            textColor: ''
+            textColor: '',
+            disabled: false
         });
         setTasks(newTasks);
         if (!isSeparator) setExpandedTasks(prev => new Set([...prev, newId]));
@@ -354,6 +357,7 @@ export default function App() {
         code += `\n`;
 
         tasks.forEach((t) => {
+            if (t.disabled) return;
             if (t.isSeparator) {
                 const separatorName = getSafeName(t).replace(/-/g, '').trim() || 'Trennlinie';
                 code += `-- ${separatorName} --\n`;
@@ -563,13 +567,20 @@ export default function App() {
                     `}
                                         style={{ paddingLeft: '16px' }}
                                     >
-                                        <div className="flex items-start gap-3">
+                                        <div className={`flex items-start gap-3 ${task.disabled ? 'opacity-40' : ''}`}>
                                             <div className="flex flex-col gap-1 mt-1 cursor-grab active:cursor-grabbing text-slate-300 hover:text-blue-500">
                                                 <GripVertical size={18} className={task.isSeparator ? "text-slate-500" : ""} />
                                             </div>
 
                                             <div className="flex-1 flex flex-col gap-2">
                                                 <div className="flex items-center gap-2">
+                                                    <button
+                                                        onClick={() => updateTask(task.id, 'disabled', !task.disabled)}
+                                                        className={`shrink-0 transition-colors ${task.disabled ? 'text-slate-300 hover:text-slate-400' : (task.isSeparator ? 'text-slate-400 hover:text-slate-300' : 'text-slate-400 hover:text-slate-500')}`}
+                                                        title={task.disabled ? 'Einschließen' : 'Ausklammern'}
+                                                    >
+                                                        {task.disabled ? <EyeOff size={14} /> : <Eye size={14} />}
+                                                    </button>
                                                     {task.isSeparator ? (
                                                         <Minus size={16} className="text-slate-400 shrink-0" />
                                                     ) : task.isMilestone ? (
