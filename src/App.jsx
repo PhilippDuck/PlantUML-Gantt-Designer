@@ -441,16 +441,17 @@ export default function App() {
     const plantumlEncoded = useMemo(() => plantumlEncoder.encode(plantUMLCode), [plantUMLCode]);
     const previewUrl = `https://www.plantuml.com/plantuml/svg/${plantumlEncoded}`;
 
-    // Debounced Preview URL – verhindert Server-Flooding bei jedem Tastendruck
-    const [debouncedPreviewUrl, setDebouncedPreviewUrl] = useState(previewUrl);
+    // Debounced Preview URL – erst nach IndexedDB-Load und 3 s Ruhe generieren
+    const [debouncedPreviewUrl, setDebouncedPreviewUrl] = useState('');
     const debounceTimer = useRef(null);
     useEffect(() => {
+        if (!isLoaded) return;
         debounceTimer.current = setTimeout(() => {
             setDebouncedPreviewUrl(previewUrl);
             setImgError(false);
-        }, 800);
+        }, 3000);
         return () => clearTimeout(debounceTimer.current);
-    }, [previewUrl]);
+    }, [previewUrl, isLoaded]);
 
     const copyToClipboard = () => {
         const el = document.createElement('textarea');
@@ -882,6 +883,11 @@ export default function App() {
                                         <AlertCircle size={48} className="mx-auto mb-2 opacity-50" />
                                         <p className="text-sm font-medium">Syntax-Fehler im Diagramm.</p>
                                         <p className="text-xs opacity-70">Prüfen Sie Namen auf Sonderzeichen.</p>
+                                    </div>
+                                ) : !debouncedPreviewUrl ? (
+                                    <div className="text-center p-8 text-slate-400">
+                                        <RefreshCw size={32} className="mx-auto mb-2 opacity-40 animate-spin" />
+                                        <p className="text-sm">Wird geladen…</p>
                                     </div>
                                 ) : (
                                     <img
