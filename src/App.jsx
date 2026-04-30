@@ -21,7 +21,8 @@ import {
     Bold,
     Italic,
     Download,
-    Upload
+    Upload,
+    ChevronDown
 } from 'lucide-react';
 import { saveProject, loadProject, exportToJSON, importFromJSON } from './db.js';
 
@@ -90,6 +91,30 @@ export default function App() {
     const [copied, setCopied] = useState(false);
     const [imgError, setImgError] = useState(false);
     const [settingsOpen, setSettingsOpen] = useState(false);
+    const [expandedTasks, setExpandedTasks] = useState(new Set());
+
+    const toggleExpanded = useCallback((id) => {
+        setExpandedTasks(prev => {
+            const next = new Set(prev);
+            next.has(id) ? next.delete(id) : next.add(id);
+            return next;
+        });
+    }, []);
+
+    const allExpanded = tasks.filter(t => !t.isSeparator).every(t => expandedTasks.has(t.id));
+    const toggleAll = () => {
+        if (allExpanded) {
+            setExpandedTasks(new Set());
+        } else {
+            setExpandedTasks(new Set(tasks.filter(t => !t.isSeparator).map(t => t.id)));
+        }
+    };
+    const [recentColors, setRecentColors] = useState([]);
+
+    const addRecentColor = useCallback((color) => {
+        if (!color) return;
+        setRecentColors(prev => [color, ...prev.filter(c => c !== color)].slice(0, 8));
+    }, []);
 
     // === IndexedDB: Laden beim Start ===
     useEffect(() => {
@@ -99,6 +124,7 @@ export default function App() {
                 if (data.title) setTitle(data.title);
                 if (data.startDate) setStartDate(data.startDate);
                 if (data.settings) setSettings(prev => ({ ...prev, ...data.settings }));
+                if (data.recentColors) setRecentColors(data.recentColors);
             }
             setIsLoaded(true);
         }).catch(() => setIsLoaded(true));
@@ -107,17 +133,17 @@ export default function App() {
     // === IndexedDB: Auto-Save bei Änderungen ===
     const saveTimer = useRef(null);
     useEffect(() => {
-        if (!isLoaded) return; // Nicht speichern bevor geladen
+        if (!isLoaded) return;
         clearTimeout(saveTimer.current);
         saveTimer.current = setTimeout(() => {
-            saveProject({ tasks, title, startDate, settings });
+            saveProject({ tasks, title, startDate, settings, recentColors });
         }, 500);
         return () => clearTimeout(saveTimer.current);
-    }, [tasks, title, startDate, settings, isLoaded]);
+    }, [tasks, title, startDate, settings, recentColors, isLoaded]);
 
     // === Export / Import ===
     const handleExport = () => {
-        exportToJSON({ tasks, title, startDate, settings });
+        exportToJSON({ tasks, title, startDate, settings, recentColors });
     };
 
     const handleImport = async () => {
@@ -127,6 +153,7 @@ export default function App() {
             if (data.title) setTitle(data.title);
             if (data.startDate) setStartDate(data.startDate);
             if (data.settings) setSettings(prev => ({ ...prev, ...data.settings }));
+            if (data.recentColors) setRecentColors(data.recentColors);
         } catch (err) {
             alert(err.message);
         }
@@ -138,12 +165,14 @@ export default function App() {
 
     const addTask = (index, isSeparator = false) => {
         const newId = Math.max(0, ...tasks.map(t => parseInt(t.id) || 0)) + 1 + "";
+        const prevTask = tasks[index];
+        const autoDepend = !isSeparator && prevTask && !prevTask.isSeparator ? prevTask.id : '';
         const newTasks = [...tasks];
         newTasks.splice(index + 1, 0, {
             id: newId,
             name: isSeparator ? `Neue Phase ${newId}` : `Neue Aufgabe ${newId}`,
             duration: 5,
-            dependsOn: '',
+            dependsOn: autoDepend,
             startDate: '',
             endDate: '',
             color: '',
@@ -156,6 +185,7 @@ export default function App() {
             textColor: ''
         });
         setTasks(newTasks);
+        if (!isSeparator) setExpandedTasks(prev => new Set([...prev, newId]));
         setImgError(false);
     };
 
@@ -505,6 +535,14 @@ export default function App() {
                                 </h2>
                                 <div className="flex items-center gap-3">
                                     <span className="text-[10px] text-slate-400 font-medium bg-slate-200/50 px-2 py-0.5 rounded hidden md:block" title="Nutze die Buttons für Text-Styling!">Tipp: Text markieren und formatieren per Toolbar!</span>
+                                    <button
+                                        onClick={toggleAll}
+                                        className="flex items-center gap-1 text-[10px] font-bold text-slate-400 hover:text-slate-600 bg-slate-200/50 hover:bg-slate-200 px-2 py-0.5 rounded transition uppercase tracking-wide"
+                                        title={allExpanded ? 'Alle einklappen' : 'Alle ausklappen'}
+                                    >
+                                        <ChevronDown size={11} className={`transition-transform ${allExpanded ? '' : '-rotate-90'}`} />
+                                        {allExpanded ? 'Einklappen' : 'Ausklappen'}
+                                    </button>
                                     <span className="text-xs text-slate-400 font-medium">{tasks.length} Einträge</span>
                                 </div>
                             </div>
@@ -594,7 +632,7 @@ export default function App() {
                                                     </div>
                                                 </div>
 
-                                                {!task.isSeparator && (
+                                                {!task.isSeparator && expandedTasks.has(task.id) && (
                                                     <>
                                                         <div className="flex flex-wrap items-center gap-3 text-[12px]">
                                                             {!task.isMilestone && (
@@ -684,8 +722,18 @@ export default function App() {
                                                                     type="color"
                                                                     value={task.color || '#cbd5e1'}
                                                                     onChange={(e) => updateTask(task.id, 'color', e.target.value)}
+                                                                    onBlur={(e) => addRecentColor(e.target.value)}
                                                                     className="w-4 h-4 p-0 border-0 rounded cursor-pointer bg-transparent"
                                                                 />
+                                                                {recentColors.map(color => (
+                                                                    <button
+                                                                        key={color}
+                                                                        onClick={() => { updateTask(task.id, 'color', color); }}
+                                                                        className="w-3 h-3 rounded-full border border-white/60 shadow-sm flex-shrink-0 hover:scale-125 transition-transform"
+                                                                        style={{ backgroundColor: color, outline: task.color === color ? '2px solid #3b82f6' : 'none', outlineOffset: '1px' }}
+                                                                        title={color}
+                                                                    />
+                                                                ))}
                                                                 {task.color && (
                                                                     <button
                                                                         onClick={() => updateTask(task.id, 'color', '')}
@@ -770,10 +818,21 @@ export default function App() {
                                                 )}
                                             </div>
 
-                                            <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition shrink-0">
-                                                <button onClick={() => addTask(index, false)} className="p-1.5 text-slate-400 hover:text-blue-600 rounded-md hover:bg-blue-50" title="Aufgabe darunter einfügen"><Plus size={14} /></button>
-                                                <button onClick={() => addTask(index, true)} className="p-1.5 text-slate-400 hover:text-slate-600 rounded-md hover:bg-slate-200" title="Trennlinie darunter einfügen"><Minus size={14} /></button>
-                                                <button onClick={() => removeTask(task.id)} className={`p-1.5 rounded-md ${task.isSeparator ? 'text-slate-400 hover:text-red-400 hover:bg-slate-700' : 'text-slate-400 hover:text-red-600 hover:bg-red-50'}`} title="Löschen"><Trash2 size={14} /></button>
+                                            <div className="flex items-center gap-0.5 shrink-0">
+                                                {!task.isSeparator && (
+                                                    <button
+                                                        onClick={() => toggleExpanded(task.id)}
+                                                        className={`p-1.5 rounded-md transition ${expandedTasks.has(task.id) ? 'text-blue-500 bg-blue-50' : 'text-slate-300 hover:text-slate-500 hover:bg-slate-100'}`}
+                                                        title={expandedTasks.has(task.id) ? 'Einklappen' : 'Ausklappen'}
+                                                    >
+                                                        <ChevronDown size={14} className={`transition-transform duration-200 ${expandedTasks.has(task.id) ? '' : '-rotate-90'}`} />
+                                                    </button>
+                                                )}
+                                                <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition">
+                                                    <button onClick={() => addTask(index, false)} className="p-1.5 text-slate-400 hover:text-blue-600 rounded-md hover:bg-blue-50" title="Aufgabe darunter einfügen"><Plus size={14} /></button>
+                                                    <button onClick={() => addTask(index, true)} className="p-1.5 text-slate-400 hover:text-slate-600 rounded-md hover:bg-slate-200" title="Trennlinie darunter einfügen"><Minus size={14} /></button>
+                                                    <button onClick={() => removeTask(task.id)} className={`p-1.5 rounded-md ${task.isSeparator ? 'text-slate-400 hover:text-red-400 hover:bg-slate-700' : 'text-slate-400 hover:text-red-600 hover:bg-red-50'}`} title="Löschen"><Trash2 size={14} /></button>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>

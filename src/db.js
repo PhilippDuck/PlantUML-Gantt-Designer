@@ -49,7 +49,21 @@ export function exportToJSON(data) {
     const blob = new Blob([json], { type: 'application/json;charset=utf-8' });
     const filename = `gantt-projekt-${new Date().toISOString().split('T')[0]}.json`;
     
-    // Navigator-basierter Download (moderne Browser)
+    const triggerLinkDownload = () => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }, 1000);
+    };
+
+    // Navigator-basierter Download (moderne Browser), Fallback bei Fehler
     if (window.showSaveFilePicker) {
         window.showSaveFilePicker({
             suggestedName: filename,
@@ -58,22 +72,13 @@ export function exportToJSON(data) {
             const writable = await handle.createWritable();
             await writable.write(blob);
             await writable.close();
-        }).catch(() => {}); // User cancelled
+        }).catch((err) => {
+            if (err?.name !== 'AbortError') triggerLinkDownload();
+        });
         return;
     }
 
-    // Fallback: Link-Download
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.style.display = 'none';
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(() => {
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-    }, 1000);
+    triggerLinkDownload();
 }
 
 export function importFromJSON() {
